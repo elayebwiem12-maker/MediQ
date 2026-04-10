@@ -23,23 +23,31 @@ class QueueNotifier extends ChangeNotifier {
   int _nextTicketNumber = 1;
 
   List<QueuePatient> get queue => List.unmodifiable(_queue);
-  List<QueuePatient> get waiting => _queue.where((p) => p.status == 'waiting').toList();
-  List<QueuePatient> get called => _queue.where((p) => p.status == 'called').toList();
-  List<QueuePatient> get done => _queue.where((p) => p.status == 'done').toList();
+  List<QueuePatient> get waiting =>
+      _queue.where((p) => p.status == 'waiting').toList();
+  List<QueuePatient> get called =>
+      _queue.where((p) => p.status == 'called').toList();
+  List<QueuePatient> get done =>
+      _queue.where((p) => p.status == 'done').toList();
 
   int get waitingCount => waiting.length;
   int get calledCount => called.length;
   int get doneCount => done.length;
 
-  int takeTicket({required String name, required String phone, required String clinic}) {
+  int takeTicket({
+    required String name,
+    required String phone,
+    required String clinic,
+  }) {
     final now = TimeOfDay.now();
-    final timeStr = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+    final h = now.hour.toString().padLeft(2, '0');
+    final m = now.minute.toString().padLeft(2, '0');
     final patient = QueuePatient(
       ticketNumber: _nextTicketNumber,
       name: name,
       phone: phone,
       clinic: clinic,
-      time: timeStr,
+      time: '$h:$m',
     );
     _queue.add(patient);
     _nextTicketNumber++;

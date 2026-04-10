@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:fluttercousd/screens/patient_home_screen.dart';
+import '../services/api_service.dart';
 
 class PatientLoginScreen extends StatefulWidget {
   const PatientLoginScreen({super.key});
@@ -9,33 +9,36 @@ class PatientLoginScreen extends StatefulWidget {
 }
 
 class _PatientLoginScreenState extends State<PatientLoginScreen> {
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
-  String _selectedClinic = 'Clinique El Manar';
+  bool _isLogin = true;
+  bool _isLoading = false;
 
-  final List<String> _clinics = [
-    'Clinique El Manar',
-    'Clinique Ennasr',
-    'Centre Médical Lac',
-  ];
+  Future<void> _submit() async {
+    setState(() => _isLoading = true);
+    final api = ApiService();
 
-  void _login() {
-    if (_nameController.text.isEmpty || _phoneController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Veuillez remplir tous les champs')),
-      );
-      return;
+    try {
+      if (_isLogin) {
+        await api.login(_emailController.text, _passwordController.text);
+      } else {
+        await api.register(
+          _emailController.text,
+          _passwordController.text,
+          _nameController.text,
+          _phoneController.text,
+        );
+      }
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(context, '/patient-home');
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Erreur: $e')));
     }
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => PatientHomeScreen(
-          name: _nameController.text,
-          phone: _phoneController.text,
-          clinic: _selectedClinic,
-        ),
-      ),
-    );
+    setState(() => _isLoading = false);
   }
 
   @override
@@ -58,9 +61,13 @@ class _PatientLoginScreenState extends State<PatientLoginScreen> {
               children: [
                 const Icon(Icons.person, size: 60, color: Colors.white),
                 const SizedBox(height: 8),
-                const Text(
-                  'Connexion Patient',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+                Text(
+                  _isLogin ? 'Connexion Patient' : 'Créer un compte',
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(height: 24),
                 Container(
@@ -70,53 +77,72 @@ class _PatientLoginScreenState extends State<PatientLoginScreen> {
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Nom complet', style: TextStyle(fontSize: 13, color: Colors.grey)),
-                      const SizedBox(height: 6),
+                      if (!_isLogin) ...[
+                        TextField(
+                          controller: _nameController,
+                          decoration: const InputDecoration(
+                            labelText: 'Nom complet',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _phoneController,
+                          decoration: const InputDecoration(
+                            labelText: 'Téléphone',
+                            border: OutlineInputBorder(),
+                          ),
+                          keyboardType: TextInputType.phone,
+                        ),
+                        const SizedBox(height: 12),
+                      ],
                       TextField(
-                        controller: _nameController,
-                        decoration: InputDecoration(
-                          hintText: 'ex: Ahmed Ben Ali',
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        controller: _emailController,
+                        decoration: const InputDecoration(
+                          labelText: 'Email',
+                          border: OutlineInputBorder(),
                         ),
+                        keyboardType: TextInputType.emailAddress,
                       ),
-                      const SizedBox(height: 16),
-                      const Text('Téléphone', style: TextStyle(fontSize: 13, color: Colors.grey)),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 12),
                       TextField(
-                        controller: _phoneController,
-                        keyboardType: TextInputType.phone,
-                        decoration: InputDecoration(
-                          hintText: 'ex: 55 123 456',
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        controller: _passwordController,
+                        decoration: const InputDecoration(
+                          labelText: 'Mot de passe',
+                          border: OutlineInputBorder(),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      const Text('Clinique', style: TextStyle(fontSize: 13, color: Colors.grey)),
-                      const SizedBox(height: 6),
-                      DropdownButtonFormField<String>(
-                        value: _selectedClinic,
-                        decoration: InputDecoration(
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        ),
-                        items: _clinics.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                        onChanged: (val) => setState(() => _selectedClinic = val!),
+                        obscureText: true,
                       ),
                       const SizedBox(height: 24),
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          onPressed: _login,
+                          onPressed: _isLoading ? null : _submit,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF1D9E75),
                             padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                           ),
-                          child: const Text('Prendre un ticket', style: TextStyle(fontSize: 16, color: Colors.white)),
+                          child: _isLoading
+                              ? const CircularProgressIndicator()
+                              : Text(
+                                  _isLogin ? 'Se connecter' : 'S\'inscrire',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => setState(() => _isLogin = !_isLogin),
+                        child: Text(
+                          _isLogin
+                              ? 'Créer un compte'
+                              : 'Déjà un compte? Se connecter',
                         ),
                       ),
                     ],
