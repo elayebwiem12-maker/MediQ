@@ -19,11 +19,13 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
   String _myPriority = 'normal';
   int _currentIndex = 0;
   int _waitingCount = 0;
+  List _history = [];
 
   @override
   void initState() {
     super.initState();
     _initSocket();
+    _loadHistory();
   }
 
   Future<void> _initSocket() async {
@@ -43,25 +45,69 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
     });
 
     _socketService.onPatientCalled((data) {
+      print('Patient called event received: $data');
       if (mounted && data['ticketNumber'] == _myTicketNumber) {
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (ctx) => AlertDialog(
-            title: const Text('C\'est votre tour! 🎉'),
-            content: Text(
-              'Ticket #$_myTicketNumber - Veuillez vous présenter au cabinet.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
+        _showPatientNotification(
+          data['ticketNumber'],
+          data['priority'] ?? 'normal',
         );
       }
     });
+  }
+
+  void _showPatientNotification(int ticketNumber, String priority) {
+    final isUrgent = priority == 'urgent';
+
+    String title = isUrgent ? 'URGENT - Cest votre tour' : 'Cest votre tour';
+    String message =
+        'Ticket ' +
+        ticketNumber.toString() +
+        ' - Veuillez vous presenter au cabinet de la Clinique El Manar.';
+
+    if (isUrgent) {
+      message = 'URGENT - ' + message;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isUrgent ? Colors.red : Colors.green,
+        duration: const Duration(seconds: 5),
+      ),
+    );
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Ticket numero ' + ticketNumber.toString()),
+            const SizedBox(height: 10),
+            Text('Veuillez vous presenter au cabinet.'),
+            if (isUrgent) ...[
+              const SizedBox(height: 10),
+              Text(
+                'Patient URGENT - Priorite absolue',
+                style: const TextStyle(
+                  color: Colors.red,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _loadWaitingCount() async {
@@ -73,7 +119,20 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
         });
       }
     } catch (e) {
-      debugPrint('Error loading queue: $e');
+      print('Error loading queue: $e');
+    }
+  }
+
+  Future<void> _loadHistory() async {
+    try {
+      final history = await _api.getMyTickets();
+      if (mounted) {
+        setState(() {
+          _history = history;
+        });
+      }
+    } catch (e) {
+      print('Error loading history: $e');
     }
   }
 
@@ -84,11 +143,16 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
         _myTicketNumber = ticket['ticket_number'];
         _myPriority = priority;
       });
+      _loadHistory();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Ticket #${ticket['ticket_number']} ($priority) pris avec succès!',
+              'Ticket ' +
+                  ticket['ticket_number'].toString() +
+                  ' (' +
+                  priority +
+                  ') pris avec succes',
             ),
             backgroundColor: priority == 'urgent'
                 ? Colors.red
@@ -112,8 +176,9 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
   Future<void> _logout() async {
     _socketService.disconnect();
     await _api.logout();
-    if (mounted)
+    if (mounted) {
       Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+    }
   }
 
   @override
@@ -146,7 +211,9 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
       ),
       body: _currentIndex == 0
           ? _buildPrendreTicket(hasTicket, position, minutes)
-          : _buildMonTicket(hasTicket, position),
+          : _currentIndex == 1
+          ? _buildMonTicket(hasTicket, position)
+          : _buildHistory(),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (i) => setState(() => _currentIndex = i),
@@ -159,6 +226,10 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.confirmation_number_outlined),
             label: 'Mon ticket',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.history),
+            label: 'Historique',
           ),
         ],
       ),
@@ -205,7 +276,7 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '$_waitingCount personnes en attente',
+                    _waitingCount.toString() + ' personnes en attente',
                     style: const TextStyle(color: Colors.grey),
                   ),
                   const SizedBox(height: 20),
@@ -234,7 +305,7 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
                       onPressed: () => _takeTicket('urgent'),
                       icon: const Icon(Icons.emergency, color: Colors.white),
                       label: const Text(
-                        '🚨 Urgent',
+                        'Urgent',
                         style: TextStyle(fontSize: 16, color: Colors.white),
                       ),
                       style: ElevatedButton.styleFrom(
@@ -262,11 +333,11 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
               child: Column(
                 children: [
                   Text(
-                    _myPriority == 'urgent' ? '🚨 URGENT' : 'Normal',
+                    _myPriority == 'urgent' ? 'URGENT' : 'Normal',
                     style: const TextStyle(color: Colors.white70, fontSize: 14),
                   ),
                   Text(
-                    '$_myTicketNumber',
+                    _myTicketNumber.toString(),
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 72,
@@ -293,7 +364,7 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
                     child: Column(
                       children: [
                         Text(
-                          '$position',
+                          position.toString(),
                           style: const TextStyle(
                             fontSize: 28,
                             fontWeight: FontWeight.bold,
@@ -319,7 +390,7 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
                     child: Column(
                       children: [
                         Text(
-                          '$minutes min',
+                          minutes.toString() + ' min',
                           style: const TextStyle(
                             fontSize: 28,
                             fontWeight: FontWeight.bold,
@@ -376,7 +447,7 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Ticket N° $_myTicketNumber',
+                  'Ticket N° ' + _myTicketNumber.toString(),
                   style: const TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
@@ -395,7 +466,7 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    _myPriority == 'urgent' ? '🚨 URGENT' : 'Normal',
+                    _myPriority == 'urgent' ? 'URGENT' : 'Normal',
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -404,7 +475,7 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Position: $position',
+                  'Position: ' + position.toString(),
                   style: const TextStyle(fontSize: 18, color: Colors.grey),
                 ),
                 const SizedBox(height: 8),
@@ -418,6 +489,114 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
               'Aucun ticket actif',
               style: TextStyle(fontSize: 18, color: Colors.grey),
             ),
+    );
+  }
+
+  Widget _buildHistory() {
+    if (_history.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.history, size: 64, color: Colors.grey),
+            SizedBox(height: 16),
+            Text(
+              'Aucun historique',
+              style: TextStyle(fontSize: 18, color: Colors.grey),
+            ),
+            Text(
+              'Vos tickets apparaitront ici',
+              style: TextStyle(fontSize: 14, color: Colors.grey),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _history.length,
+      itemBuilder: (context, index) {
+        final ticket = _history[index];
+        final isUrgent = ticket['priority'] == 'urgent';
+        final isDone = ticket['status'] == 'done';
+        final date = ticket['created_at'] != null
+            ? DateTime.parse(
+                ticket['created_at'],
+              ).toString().substring(0, 19).replaceAll('T', ' ')
+            : 'Date inconnue';
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          elevation: 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: isUrgent ? Border.all(color: Colors.red, width: 1) : null,
+            ),
+            child: ListTile(
+              leading: CircleAvatar(
+                backgroundColor: isUrgent
+                    ? Colors.red
+                    : const Color(0xFF1D9E75),
+                child: Text(
+                  ticket['ticket_number'].toString(),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              title: Row(
+                children: [
+                  Text(
+                    'Ticket #' + ticket['ticket_number'].toString(),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  if (isUrgent) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        'URGENT',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Clinique: ' +
+                        (ticket['clinic_name'] ?? 'Clinique El Manar'),
+                  ),
+                  Text('Date: ' + date),
+                  Text('Statut: ' + (isDone ? 'Termine' : ticket['status'])),
+                ],
+              ),
+              trailing: isDone
+                  ? const Icon(Icons.check_circle, color: Colors.green)
+                  : const Icon(Icons.pending, color: Colors.orange),
+            ),
+          ),
+        );
+      },
     );
   }
 }

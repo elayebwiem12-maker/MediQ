@@ -13,10 +13,10 @@ import 'services/api_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialiser OneSignal avec ton App ID
+  // Initialiser OneSignal
   OneSignal.initialize("761ea292-91d7-4566-8fa5-a7313205f0bf");
 
-  // Demander la permission pour les notifications
+  // Demander la permission
   OneSignal.Notifications.requestPermission(true);
 
   runApp(
@@ -51,7 +51,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// Auth wrapper to initialize socket after login
 class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
 
@@ -75,11 +74,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
     if (isLoggedIn) {
       final token = await _api.getToken();
       if (token != null) {
-        // Initialize socket connection after login
         final socketService = SocketService();
         socketService.connect(token);
-
-        // Set OneSignal external user ID and user tag
         final userId = await _api.getUserId();
         if (userId != null) {
           await OneSignal.login(userId);
@@ -98,7 +94,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
     if (_isChecking) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-
     if (_isLoggedIn) {
       return const RoleSelectionScreen();
     } else {

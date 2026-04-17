@@ -37,42 +37,22 @@ class _AdminScreenState extends State<AdminScreen> {
   void _setupSocketListeners() {
     if (_isListening) return;
     _isListening = true;
-
     _socketService.onQueueUpdated((data) {
       _loadQueue();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('File d\'attente mise à jour!'),
-            duration: Duration(seconds: 1),
-          ),
-        );
-      }
-    });
-
-    _socketService.onPatientCalled((data) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Patient ${data['ticketNumber']} appelé!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
     });
   }
 
   Future<void> _loadQueue() async {
     try {
       final queue = await _api.getQueue(_defaultClinicId);
-      if (mounted)
+      if (mounted) {
         setState(() {
           _queue = queue;
           _isLoading = false;
         });
+      }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
-      debugPrint('Error loading queue: $e');
     }
   }
 
@@ -83,8 +63,32 @@ class _AdminScreenState extends State<AdminScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Patient appelé!'),
+            content: Text('Patient suivant appele'),
             backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceAll('Exception: ', '')),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _callUrgentFirst() async {
+    try {
+      await _api.callUrgentFirst(_defaultClinicId);
+      await _loadQueue();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Patient urgent passe en priorite'),
+            backgroundColor: Colors.orange,
           ),
         );
       }
@@ -103,8 +107,9 @@ class _AdminScreenState extends State<AdminScreen> {
   Future<void> _logout() async {
     _socketService.disconnect();
     await _api.logout();
-    if (mounted)
+    if (mounted) {
       Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+    }
   }
 
   @override
@@ -201,7 +206,8 @@ class _AdminScreenState extends State<AdminScreen> {
                           const Icon(Icons.emergency, color: Colors.red),
                           const SizedBox(width: 8),
                           Text(
-                            '$urgentCount patient(s) urgent(s) en attente!',
+                            urgentCount.toString() +
+                                ' patient(s) urgent(s) en attente',
                             style: const TextStyle(
                               color: Colors.red,
                               fontWeight: FontWeight.bold,
@@ -232,7 +238,7 @@ class _AdminScreenState extends State<AdminScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: _statCard(
-                          'Traités',
+                          'Traites',
                           doneCount.toString(),
                           Icons.check_circle,
                           Colors.green,
@@ -241,24 +247,46 @@ class _AdminScreenState extends State<AdminScreen> {
                     ],
                   ),
                   const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: waitingCount > 0 ? _callNext : null,
-                      icon: const Icon(Icons.campaign, color: Colors.white),
-                      label: const Text(
-                        'Appeler le suivant',
-                        style: TextStyle(fontSize: 16, color: Colors.white),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF1D9E75),
-                        disabledBackgroundColor: Colors.grey.shade300,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: waitingCount > 0 ? _callNext : null,
+                          icon: const Icon(
+                            Icons.arrow_forward,
+                            color: Colors.white,
+                          ),
+                          label: const Text('Suivant (FIFO)'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF1D9E75),
+                            disabledBackgroundColor: Colors.grey.shade300,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: urgentCount > 0 ? _callUrgentFirst : null,
+                          icon: const Icon(
+                            Icons.emergency,
+                            color: Colors.white,
+                          ),
+                          label: const Text('Urgent en priorite'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            disabledBackgroundColor: Colors.grey.shade300,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 20),
                   const Text(
@@ -275,8 +303,8 @@ class _AdminScreenState extends State<AdminScreen> {
                           style: TextStyle(color: Colors.grey),
                         ),
                       ),
-                    )
-                  else
+                    ),
+                  if (_queue.isNotEmpty)
                     ListView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
@@ -286,18 +314,16 @@ class _AdminScreenState extends State<AdminScreen> {
                         final isUrgent = p['priority'] == 'urgent';
                         final isCalled = p['status'] == 'called';
                         final isDone = p['status'] == 'done';
-
                         Color statusColor = isCalled
                             ? const Color(0xFF1D9E75)
                             : isDone
                             ? Colors.grey
                             : Colors.orange;
                         String statusText = isCalled
-                            ? 'Appelé'
+                            ? 'Appele'
                             : isDone
-                            ? 'Terminé'
+                            ? 'Termine'
                             : 'Attente';
-
                         return Container(
                           margin: const EdgeInsets.only(bottom: 8),
                           padding: const EdgeInsets.all(12),
@@ -322,7 +348,7 @@ class _AdminScreenState extends State<AdminScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
                                   Text(
-                                    '${p['ticket_number']}',
+                                    p['ticket_number'].toString(),
                                     style: TextStyle(
                                       fontSize: 20,
                                       fontWeight: FontWeight.bold,

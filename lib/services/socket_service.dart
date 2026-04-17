@@ -1,4 +1,3 @@
-// lib/services/socket_service.dart
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 class SocketService {
@@ -6,7 +5,7 @@ class SocketService {
   factory SocketService() => _instance;
   SocketService._internal();
 
-  static const String serverUrl = 'http://192.168.1.9:3000';
+  static const String serverUrl = 'http://localhost:3000';
 
   IO.Socket? _socket;
   String? _currentClinicId;
